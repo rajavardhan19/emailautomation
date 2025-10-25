@@ -7,9 +7,23 @@ const path = require('path');
 const { parse } = require('csv-parse/sync');
 
 require('dotenv').config();
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
-const upload = multer({ dest: 'uploads/' });
+app.disable('x-powered-by');
+app.use(helmet());
+
+// Ensure uploads dir exists
+const UPLOAD_DIR = process.env.UPLOAD_DIR || 'uploads';
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Limit requests to prevent abuse
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 500 }); // 500 requests / minute
+app.use(limiter);
+
+// Multer with file size limit (e.g. 20MB)
+const upload = multer({ dest: UPLOAD_DIR + '/', limits: { fileSize: 20 * 1024 * 1024 } });
 
 // Load SMTP credentials from environment variables (use .env)
 const SMTP_USER = process.env.SMTP_USER;
@@ -23,6 +37,7 @@ const DEFAULT_SUBJECT = 'NCET NOTES - easyEngineers';
 const DEFAULT_BODY = 'Hi {name},\n\nThis is an automated message sent via the email automation script By easyEngineers Formly Know As NCET NOTES 🙏🏻.';
 
 app.use(express.static('.'));
+app.use(express.urlencoded({ extended: true }));
 
 app.get('/', (req, res) => {
   res.send(`
