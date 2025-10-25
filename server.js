@@ -187,7 +187,7 @@ app.get('/', (req, res) => {
           const fileName = e.target.files[0]?.name || '';
           document.getElementById('fileName').textContent = fileName ? '✓ ' + fileName : '';
         });
-      </script>
+            </script>
     </body>
     </html>
   `);
@@ -196,7 +196,9 @@ app.get('/', (req, res) => {
 app.post('/send', upload.single('file'), async (req, res) => {
   let log = '';
   if (!req.file) {
-    return res.send('No file uploaded.');
+    const errMsg = 'No file uploaded.';
+    if (req.xhr) return res.status(400).json({ error: errMsg });
+    return res.status(400).send(errMsg);
   }
   let rows = [];
   const ext = path.extname(req.file.originalname).toLowerCase();
@@ -296,146 +298,18 @@ app.post('/send', upload.single('file'), async (req, res) => {
     await new Promise(r => setTimeout(r, 1500));
   }
   fs.unlinkSync(req.file.path);
+  // If XHR request, return JSON log
+  if (req.xhr) return res.json({ log });
+  // Otherwise render the HTML result page (kept for backward compatibility)
   res.send(`
     <!DOCTYPE html>
     <html>
     <head>
       <title>Bulk Email Sender - NCET Notes</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          min-height: 100vh;
-          padding: 20px;
-        }
-        .container {
-          background: white;
-          border-radius: 20px;
-          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-          padding: 40px;
-          max-width: 700px;
-          margin: 20px auto;
-        }
-        h2 {
-          color: #667eea;
-          text-align: center;
-          margin-bottom: 30px;
-          font-size: 28px;
-        }
-        .upload-area {
-          border: 2px dashed #667eea;
-          border-radius: 10px;
-          padding: 30px;
-          text-align: center;
-          background: #f8f9ff;
-          transition: all 0.3s ease;
-          margin-bottom: 20px;
-        }
-        .upload-area:hover {
-          border-color: #764ba2;
-          background: #f0f2ff;
-        }
-        input[type="file"] {
-          display: none;
-        }
-        .file-label {
-          cursor: pointer;
-          color: #667eea;
-          font-weight: 600;
-          font-size: 16px;
-        }
-        .file-label:hover {
-          color: #764ba2;
-        }
-        button {
-          width: 100%;
-          padding: 15px;
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          border: none;
-          border-radius: 10px;
-          font-size: 18px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: transform 0.2s, box-shadow 0.2s;
-        }
-        button:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-        }
-        button:active {
-          transform: translateY(0);
-        }
-        .file-name {
-          margin-top: 15px;
-          color: #666;
-          font-size: 14px;
-        }
-        .emoji {
-          font-size: 48px;
-          margin-bottom: 15px;
-        }
-        .log-section {
-          margin-top: 30px;
-          padding-top: 30px;
-          border-top: 2px solid #f0f0f0;
-        }
-        .log-section h3 {
-          color: #667eea;
-          margin-bottom: 15px;
-          font-size: 20px;
-        }
-        .log {
-          background: #f8f9ff;
-          border-radius: 10px;
-          padding: 20px;
-          white-space: pre-wrap;
-          font-family: 'Courier New', monospace;
-          font-size: 14px;
-          line-height: 1.6;
-          max-height: 400px;
-          overflow-y: auto;
-          border: 1px solid #e0e0e0;
-        }
-        .back-btn {
-          margin-top: 20px;
-          background: #6c757d;
-          padding: 12px;
-          font-size: 16px;
-        }
-        .back-btn:hover {
-          background: #5a6268;
-        }
-      </style>
     </head>
     <body>
-      <div class="container">
-        <h2>📤 Bulk Email Sender</h2>
-        <p style="text-align: center; color: #666; margin-bottom: 30px;">NCET Notes</p>
-        <form method="post" enctype="multipart/form-data" action="/send" id="uploadForm">
-          <div class="upload-area">
-            <div class="emoji">📁</div>
-            <label for="fileInput" class="file-label">
-              Click to choose CSV or Excel file
-            </label>
-            <input type="file" id="fileInput" name="file" accept=".csv,.xlsx,.xls" required>
-            <div class="file-name" id="fileName"></div>
-          </div>
-          <button type="submit">Send Emails</button>
-        </form>
-        <div class="log-section">
-          <h3>📋 Email Log</h3>
-          <div class="log">${log}</div>
-        </div>
-        <button class="back-btn" onclick="window.location.href='/'">← Send More Emails</button>
-      </div>
-      <script>
-        document.getElementById('fileInput').addEventListener('change', function(e) {
-          const fileName = e.target.files[0]?.name || '';
-          document.getElementById('fileName').textContent = fileName ? '✓ ' + fileName : '';
-        });
-      </script>
+      <pre>${log}</pre>
+      <p><a href="/">Back</a></p>
     </body>
     </html>
   `);
