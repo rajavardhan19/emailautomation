@@ -213,60 +213,10 @@ app.post('/send', upload.single('file'), async (req, res) => {
   const attachCol = findCol(columns, ['Attachment', 'File', 'FilePath', 'Path', 'File Path']);
 
   // Setup nodemailer
-  // Transporter options tuned for cloud environments (pooling, timeouts, debug)
-  const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-  const SMTP_SECURE = (process.env.SMTP_SECURE === 'true'); // false for 587
-  const SMTP_POOL = (process.env.SMTP_POOL !== 'false');
-
   const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
+    service: 'gmail',
     auth: { user: SMTP_USER, pass: SMTP_PASS },
-    pool: SMTP_POOL,
-    maxConnections: parseInt(process.env.SMTP_MAX_CONNECTIONS || '5', 10),
-    maxMessages: parseInt(process.env.SMTP_MAX_MESSAGES || '100', 10),
-    // timeouts (ms)
-    connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT || '30000', 10),
-    greetingTimeout: parseInt(process.env.SMTP_GREETING_TIMEOUT || '30000', 10),
-    socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT || '30000', 10),
-    requireTLS: (process.env.SMTP_REQUIRE_TLS !== 'false'),
-    logger: true,
-    debug: true,
   });
-
-  // Helper: send with retry
-  async function sendMailWithRetry(mailOptions) {
-    const maxRetries = parseInt(process.env.SMTP_RETRIES || '2', 10);
-    let attempt = 0;
-    while (true) {
-      try {
-        attempt++;
-        console.log(`Attempt ${attempt} -> sending to: ${mailOptions.to}`);
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Send success:', info && info.messageId ? info.messageId : info);
-        return info;
-      } catch (err) {
-        console.error(`Send attempt ${attempt} failed for ${mailOptions.to}:`, err && err.message ? err.message : err);
-        if (attempt > maxRetries) throw err;
-        // backoff before retry
-        const backoff = Math.min(5000 * attempt, 30000);
-        await new Promise((r) => setTimeout(r, backoff));
-      }
-    }
-  }
-
-  // Verify SMTP connectivity early so we can provide a helpful log if Render blocks SMTP
-  try {
-    await transporter.verify();
-    log += '✅ SMTP connection verified.\n';
-    console.log('SMTP connection verified.');
-  } catch (verifyErr) {
-    log += `⚠️ SMTP verify failed: ${verifyErr && verifyErr.message ? verifyErr.message : verifyErr}\n`;
-    console.error('SMTP verify failed:', verifyErr && verifyErr.message ? verifyErr.message : verifyErr);
-    // Don't abort; we'll still try sending with retries, but this early message helps debug platform-level blocks.
-  }
 
   for (const row of rows) {
     const to = row[emailCol] || '';
@@ -323,10 +273,10 @@ app.post('/send', upload.single('file'), async (req, res) => {
     }
 
     try {
-      await sendMailWithRetry(mailOptions);
+      await transporter.sendMail(mailOptions);
       log += `✅ Sent to ${to}\n`;
     } catch (e) {
-      log += `❌ Failed to send to ${to}: ${e && e.message ? e.message : e}\n`;
+      log += `❌ Failed to send to ${to}: ${e.message}\n`;
     }
     await new Promise(r => setTimeout(r, 1500));
   }
@@ -478,35 +428,3 @@ app.post('/send', upload.single('file'), async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log('Server running on http://localhost:' + PORT));
-
-// Lightweight endpoint to test SMTP connectivity from this host (useful on Render)
-app.get('/smtp-test', async (req, res) => {
-  const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
-  const SMTP_SECURE = (process.env.SMTP_SECURE === 'true');
-  const SMTP_POOL = (process.env.SMTP_POOL !== 'false');
-
-  const testTransporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-    pool: SMTP_POOL,
-    maxConnections: parseInt(process.env.SMTP_MAX_CONNECTIONS || '5', 10),
-    maxMessages: parseInt(process.env.SMTP_MAX_MESSAGES || '100', 10),
-    connectionTimeout: parseInt(process.env.SMTP_CONNECTION_TIMEOUT || '30000', 10),
-    greetingTimeout: parseInt(process.env.SMTP_GREETING_TIMEOUT || '30000', 10),
-    socketTimeout: parseInt(process.env.SMTP_SOCKET_TIMEOUT || '30000', 10),
-    requireTLS: (process.env.SMTP_REQUIRE_TLS !== 'false'),
-    logger: true,
-    debug: true,
-  });
-
-  try {
-    await testTransporter.verify();
-    return res.status(200).send('SMTP verify: OK');
-  } catch (err) {
-    console.error('SMTP test verify failed:', err && err.message ? err.message : err);
-    return res.status(500).send('SMTP verify failed: ' + (err && err.message ? err.message : err));
-  }
-});
